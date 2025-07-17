@@ -56,15 +56,20 @@ const (
 
 type (
 	Server struct {
-		Addr            string     //监听地址
-		MaxPayloadBytes int        //最大消息长度
-		MaxHeaderBytes  int        //最大head息长度
-		Rate            rate.Limit //每秒产生令牌的个数
-		Burst           int        //令牌桶大小个数
-		ReadTimeout     int        //读超时秒
-		WriteTimeout    int        //写超时秒
-		Web             bool       //是否是用于web，跨域
-		UserAgent       string     //允许的UserAgent
+		Addr            string      //监听地址
+		MaxPayloadBytes int         //最大消息长度
+		MaxHeaderBytes  int         //最大head息长度
+		Rate            rate.Limit  //每秒产生令牌的个数
+		Burst           int         //令牌桶大小个数
+		ReadTimeout     int         //读超时秒
+		WriteTimeout    int         //写超时秒
+		Web             bool        //是否是用于web，跨域
+		UserAgent       string      //允许的UserAgent
+		corsCfg         *CORSConfig // cros配置，web 为 true  有效
+	}
+
+	CORSConfig struct {
+		AllowedOrigins []string
 	}
 
 	auth struct {
@@ -110,7 +115,7 @@ func (i *iPRateLimiter) ipLimiter(ip string) (ipItem *iPItem) {
 	return ipItem
 }
 
-//dump 清除不活跃的ip，重置高频ip，释放内存
+// dump 清除不活跃的ip，重置高频ip，释放内存
 func (i *iPRateLimiter) dump() {
 	ticker := time.NewTicker(dumpPeriod)
 	go func() {
@@ -249,16 +254,24 @@ func (h Server) Run() {
 
 				if h.Web == true {
 					//跨域
-					w.Header().Set("Access-Control-Allow-Origin", "*")
-					w.Header().Set("Access-Control-Allow-Credentials", "true")
-					w.Header().Set("Access-Control-Allow-Methods", "*")
-					w.Header().Set("Access-Control-Allow-Headers", "*")
-					//去掉缓存
+					originSet := make(map[string]struct{}, len(h.corsCfg.AllowedOrigins))
+					for _, o := range h.corsCfg.AllowedOrigins {
+						originSet[o] = struct{}{}
+					}
+					origin := r.Header.Get("Origin")
+					if _, ok := originSet[origin]; ok {
+						w.Header().Set("Access-Control-Allow-Origin", origin)
+						w.Header().Set("Vary", "Origin")
+						w.Header().Set("Access-Control-Allow-Credentials", "true")
+					}
+
+					w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+					w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+
 					w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 					w.Header().Set("Pragma", "no-cache")
 					w.Header().Set("Expires", "0")
 
-					//跨域侦测
 					if r.Method == http.MethodOptions {
 						w.WriteHeader(http.StatusOK)
 						return
