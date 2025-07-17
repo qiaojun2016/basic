@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/go-redis/redis/v8"
 	"github.com/qiaojun2016/basic/color"
-	"github.com/go-redis/redis/v9"
 	"log"
 	"time"
 )
