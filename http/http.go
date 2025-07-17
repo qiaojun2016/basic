@@ -65,7 +65,7 @@ type (
 		WriteTimeout    int         //写超时秒
 		Web             bool        //是否是用于web，跨域
 		UserAgent       string      //允许的UserAgent
-		corsCfg         *CORSConfig // cros配置，web 为 true  有效
+		CorsCfg         *CORSConfig // cros配置，web 为 true  有效
 	}
 
 	CORSConfig struct {
@@ -254,8 +254,8 @@ func (h Server) Run() {
 
 				if h.Web == true {
 					//跨域
-					originSet := make(map[string]struct{}, len(h.corsCfg.AllowedOrigins))
-					for _, o := range h.corsCfg.AllowedOrigins {
+					originSet := make(map[string]struct{}, len(h.CorsCfg.AllowedOrigins))
+					for _, o := range h.CorsCfg.AllowedOrigins {
 						originSet[o] = struct{}{}
 					}
 					origin := r.Header.Get("Origin")
