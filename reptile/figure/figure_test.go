@@ -1,9 +1,9 @@
 package figure
 
 import (
-	"github.com/clong1995/basic/id"
-	"github.com/clong1995/basic/oss"
-	"github.com/clong1995/basic/reptile/page"
+	"github.com/qiaojun2016/basic/id"
+	"github.com/qiaojun2016/basic/oss"
+	"github.com/qiaojun2016/basic/reptile/page"
 	"testing"
 )
 

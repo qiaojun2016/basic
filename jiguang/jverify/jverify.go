@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/clong1995/basic/cipher"
-	"github.com/clong1995/basic/color"
-	"github.com/clong1995/basic/request"
+	"github.com/qiaojun2016/basic/cipher"
+	"github.com/qiaojun2016/basic/color"
+	"github.com/qiaojun2016/basic/request"
 	"log"
 )
 

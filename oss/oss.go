@@ -9,7 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
-	"github.com/clong1995/basic/color"
+	"github.com/qiaojun2016/basic/color"
 	"io"
 	"log"
 	"net/http"

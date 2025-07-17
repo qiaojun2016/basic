@@ -4,7 +4,7 @@ package page
 import (
 	"context"
 	"github.com/chromedp/chromedp"
-	"github.com/clong1995/basic/color"
+	"github.com/qiaojun2016/basic/color"
 	"log"
 	"time"
 )

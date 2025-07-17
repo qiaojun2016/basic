@@ -3,7 +3,7 @@ package mysql
 import (
 	"database/sql"
 	"fmt"
-	"github.com/clong1995/basic/color"
+	"github.com/qiaojun2016/basic/color"
 	_ "github.com/go-sql-driver/mysql"
 	"log"
 	"reflect"

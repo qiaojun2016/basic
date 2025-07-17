@@ -3,8 +3,8 @@ package token
 import (
 	"bytes"
 	"encoding/binary"
-	"github.com/clong1995/basic/cipher"
-	"github.com/clong1995/basic/id"
+	"github.com/qiaojun2016/basic/cipher"
+	"github.com/qiaojun2016/basic/id"
 	"time"
 )
 

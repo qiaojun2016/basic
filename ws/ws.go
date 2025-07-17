@@ -2,11 +2,11 @@ package ws
 
 import (
 	"fmt"
-	"github.com/clong1995/basic/cipher"
-	"github.com/clong1995/basic/color"
-	"github.com/clong1995/basic/id"
-	"github.com/clong1995/basic/ip"
-	"github.com/clong1995/basic/token"
+	"github.com/qiaojun2016/basic/cipher"
+	"github.com/qiaojun2016/basic/color"
+	"github.com/qiaojun2016/basic/id"
+	"github.com/qiaojun2016/basic/ip"
+	"github.com/qiaojun2016/basic/token"
 	"github.com/gorilla/websocket"
 	"log"
 	"net/http"

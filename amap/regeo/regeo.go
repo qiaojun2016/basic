@@ -3,7 +3,7 @@ package regeo
 import (
 	"encoding/json"
 	"errors"
-	"github.com/clong1995/basic/request"
+	"github.com/qiaojun2016/basic/request"
 	"log"
 )
 

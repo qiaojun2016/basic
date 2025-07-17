@@ -5,7 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/clong1995/basic/color"
+	"github.com/qiaojun2016/basic/color"
 	"io"
 	"io/ioutil"
 	"log"

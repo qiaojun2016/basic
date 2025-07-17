@@ -67,8 +67,8 @@ github.com/chromedp/sysutil v1.0.0/go.mod h1:kgWmDdq8fTzXYcKIBqIYvRRTnYb9aNS9moA
 github.com/clbanning/mxj/v2 v2.5.6 h1:Jm4VaCI/+Ug5Q57IzEoZbwx4iQFA6wkXv72juUSeK+g=
 github.com/clbanning/mxj/v2 v2.5.6/go.mod h1:hNiWqW14h+kc+MdF9C6/YoRfjEJoR3ou6tn/Qo+ve2s=
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
-github.com/clong1995/basic v1.1.2 h1:5yajrgKZ/fYkkeJZ+JPefolHBTGINmpbmVCQkLqWzMg=
-github.com/clong1995/basic v1.1.2/go.mod h1:xfag2mGggxS+4mHty5sQjJDWttwNWwdABYAgEswxm64=
+github.com/qiaojun2016/basic v1.1.2 h1:5yajrgKZ/fYkkeJZ+JPefolHBTGINmpbmVCQkLqWzMg=
+github.com/qiaojun2016/basic v1.1.2/go.mod h1:xfag2mGggxS+4mHty5sQjJDWttwNWwdABYAgEswxm64=
 github.com/cncf/udpa/go v0.0.0-20191209042840-269d4d468f6f/go.mod h1:M8M6+tZqaGXZJjfX53e64911xZQV5JYwmTeXPW+k8Sc=
 github.com/coreos/etcd v3.3.10+incompatible/go.mod h1:uF7uidLiAD3TWHmW31ZFd/JWoc32PjwdhPthX9715RE=
 github.com/coreos/go-etcd v2.0.0+incompatible/go.mod h1:Jez6KQU2B/sWsbdaef3ED8NzMklzPG4d5KIOhIy30Tk=

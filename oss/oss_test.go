@@ -1,7 +1,7 @@
 package oss
 
 import (
-	"github.com/clong1995/basic/id"
+	"github.com/qiaojun2016/basic/id"
 	"testing"
 )
 

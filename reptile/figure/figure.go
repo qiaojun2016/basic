@@ -4,8 +4,8 @@ package figure
 import (
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
-	"github.com/clong1995/basic/oss"
-	"github.com/clong1995/basic/reptile/page"
+	"github.com/qiaojun2016/basic/oss"
+	"github.com/qiaojun2016/basic/reptile/page"
 	"log"
 	"strings"
 )

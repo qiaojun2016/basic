@@ -12,7 +12,6 @@ require (
 	github.com/aliyun/aliyun-oss-go-sdk v2.2.4+incompatible
 	github.com/bwmarrin/snowflake v0.3.0
 	github.com/chromedp/chromedp v0.8.2
-	github.com/clong1995/basic v1.1.2
 	github.com/dgraph-io/badger/v3 v3.2103.2
 	github.com/eclipse/paho.mqtt.golang v1.4.1
 	github.com/go-redis/redis/v9 v9.0.0-beta.1

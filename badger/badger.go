@@ -2,7 +2,7 @@ package badger
 
 import (
 	"fmt"
-	"github.com/clong1995/basic/color"
+	"github.com/qiaojun2016/basic/color"
 	badgerDB "github.com/dgraph-io/badger/v3"
 	"log"
 )

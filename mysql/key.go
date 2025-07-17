@@ -2,7 +2,7 @@ package mysql
 
 import (
 	"fmt"
-	"github.com/clong1995/basic/id"
+	"github.com/qiaojun2016/basic/id"
 	"log"
 	"strconv"
 	"strings"

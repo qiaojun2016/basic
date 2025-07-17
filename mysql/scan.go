@@ -3,7 +3,7 @@ package mysql
 import (
 	"database/sql"
 	"fmt"
-	"github.com/clong1995/basic/fieldCopy"
+	"github.com/qiaojun2016/basic/fieldCopy"
 	"log"
 	"reflect"
 	"regexp"
