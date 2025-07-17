@@ -1,4 +1,4 @@
-module github.com/clong1995/basic
+module github.com/qiaojun2016/basic
 
 go 1.18
 
