@@ -48,7 +48,7 @@ body: {
 */
 
 const (
-	contentSign     = "content-sign"   //指纹
+	contentSign     = "Content-Sign"   //指纹
 	maxRequestCount = 2000             //存活周期内的最大请求数 1200
 	dumpPeriod      = 10 * time.Minute //清理周期 10
 	maxAliveTime    = 10 * time.Minute //存活周期 10
@@ -251,23 +251,23 @@ func (h Server) Run() {
 						return
 					}
 				}
-
+				fmt.Println("测试",h.Web)
 				if h.Web == true {
 					//跨域
 					originSet := make(map[string]struct{}, len(h.CorsCfg.AllowedOrigins))
 					for _, o := range h.CorsCfg.AllowedOrigins {
 						originSet[o] = struct{}{}
 					}
+
 					origin := r.Header.Get("Origin")
 					if _, ok := originSet[origin]; ok {
 						w.Header().Set("Access-Control-Allow-Origin", origin)
 						w.Header().Set("Vary", "Origin")
-						w.Header().Set("Access-Control-Allow-Credentials", "true")
+						w.Header().Set("access-control-expose-headers", "Content-Sign")
+						//w.Header().Set("Access-Control-Allow-Credentials", "true")
 					}
-
 					w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-					w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
-
+					w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Content-Sign")
 					w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 					w.Header().Set("Pragma", "no-cache")
 					w.Header().Set("Expires", "0")
