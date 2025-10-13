@@ -3,8 +3,9 @@ package mysql
 import (
 	"database/sql"
 	"fmt"
-	"github.com/qiaojun2016/basic/color"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/jmoiron/sqlx"
+	"github.com/qiaojun2016/basic/color"
 	"log"
 	"reflect"
 	"strings"
@@ -21,7 +22,7 @@ type (
 
 var (
 	Mysql   *server
-	mysqlDB *sql.DB
+	mysqlDB *sqlx.DB
 )
 
 func TxAuto(f func(*sql.Rows, *sql.Tx) (err error)) (err error) {
@@ -72,7 +73,7 @@ func (s server) RowsCloseAndTxEnd(rows *sql.Rows, tx *sql.Tx, err error) {
 	s.TxEnd(tx, err)
 }
 
-//TxExecProc 执行一条sql
+// TxExecProc 执行一条sql
 func (s server) TxExecProc(tx *sql.Tx, procName string, args ...interface{}) (sql.Result, error) {
 	ret, values := argsData(args)
 	sqlQuery := fmt.Sprintf("CALL %s (%s)", procName, ret)
@@ -103,7 +104,7 @@ func (s Server) Run() {
 	}
 
 	var sqlErr error
-	mysqlDB, sqlErr = sql.Open("mysql", s.DataSource+"?charset=utf8mb4&loc=Asia%2FShanghai&parseTime=true&multiStatements=true")
+	mysqlDB, sqlErr = sqlx.Open("mysql", s.DataSource+"?charset=utf8mb4&loc=Asia%2FShanghai&parseTime=true&multiStatements=true")
 	if sqlErr != nil {
 		log.Fatalln(color.Red, sqlErr, color.Reset)
 	}
@@ -118,7 +119,7 @@ func (s Server) Run() {
 	color.Success(fmt.Sprintf("[mysql] connect %s success", strings.Split(s.DataSource, "@tcp")[1]))
 }
 
-//格式化参数
+// 格式化参数
 func argsData(args []interface{}) (sqlArgs string, values []interface{}) {
 	for _, arg := range args {
 		//TODO 切片
@@ -148,4 +149,11 @@ func argsData(args []interface{}) (sqlArgs string, values []interface{}) {
 	sqlArgs = strings.Repeat("?,", len(values))
 	sqlArgs = strings.TrimRight(sqlArgs, ",")
 	return
+}
+
+func GetDbExec() DBExec {
+	return mysqlDB
+}
+func GetDb() *sqlx.DB {
+	return mysqlDB
 }
