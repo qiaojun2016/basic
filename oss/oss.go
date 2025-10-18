@@ -170,3 +170,7 @@ func (s Server) Run() {
 	}
 	color.Success(fmt.Sprintf("[oss] open %s/%s handle success", s.Endpoint, s.BucketName))
 }
+
+func GetBucket() *oss.Bucket {
+	return bucket
+}
