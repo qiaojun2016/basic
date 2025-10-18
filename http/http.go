@@ -251,7 +251,6 @@ func (h Server) Run() {
 						return
 					}
 				}
-				fmt.Println("测试",h.Web)
 				if h.Web == true {
 					//跨域
 					originSet := make(map[string]struct{}, len(h.CorsCfg.AllowedOrigins))
