@@ -246,7 +246,7 @@ func (h Server) Run() {
 					if !ipItem.limiter.Allow() {
 						//抛弃多余流量
 						errStr := fmt.Sprintf("%s请求过快", realIp)
-						fmt.Println(errStr)
+						log.Println(errStr)
 						http.Error(w, errStr, http.StatusTooManyRequests)
 						return
 					}
