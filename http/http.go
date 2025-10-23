@@ -54,6 +54,16 @@ const (
 	maxAliveTime    = 10 * time.Minute //存活周期 10
 )
 
+func chainMiddlewareFunc(h http.HandlerFunc, middlewares ...func(http.HandlerFunc) http.HandlerFunc) http.HandlerFunc {
+	if middlewares == nil || len(middlewares) == 0 {
+		return h
+	}
+	for i := len(middlewares) - 1; i >= 0; i-- {
+		h = middlewares[i](h)
+	}
+	return h
+}
+
 type (
 	Server struct {
 		Addr            string      //监听地址
@@ -66,6 +76,7 @@ type (
 		Web             bool        //是否是用于web，跨域
 		UserAgent       string      //允许的UserAgent
 		CorsCfg         *CORSConfig // cros配置，web 为 true  有效
+		Middlewares     func(http.HandlerFunc) http.HandlerFunc
 	}
 
 	CORSConfig struct {
@@ -219,7 +230,7 @@ func (h Server) Run() {
 	for s, r := range routeList {
 		//闭包保存路由
 		func(pattern string, route Route) {
-			mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+			finalHandler := func(w http.ResponseWriter, r *http.Request) {
 				//关闭
 				defer func() {
 					_ = r.Body.Close()
@@ -565,7 +576,9 @@ func (h Server) Run() {
 					log.Println(errStr)
 					return
 				}
-			})
+			}
+			// 中间处理请求
+			mux.HandleFunc(pattern, chainMiddlewareFunc(finalHandler, h.Middlewares))
 		}(s, r)
 	}
 
