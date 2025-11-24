@@ -1,6 +1,7 @@
 package http
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/qiaojun2016/basic/cipher"
@@ -69,6 +70,9 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 				return
 			}
+			// 恢复body 方便后续调用使用
+			// todo 认证相关的信息放到 header 里面
+			r.Body = io.NopCloser(bytes.NewBuffer(paramByte))
 		}
 
 		if len(paramByte) == 0 {
