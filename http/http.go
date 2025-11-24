@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/qiaojun2016/basic/cipher"
 	"github.com/qiaojun2016/basic/color"
+	"github.com/qiaojun2016/basic/http/contextx"
 	. "github.com/qiaojun2016/basic/http/route"
 	"github.com/qiaojun2016/basic/id"
 	"github.com/qiaojun2016/basic/ip"
@@ -219,7 +220,6 @@ func (h *Server) Run() {
 	}
 
 	mux := http.NewServeMux()
-	log.Println("1 middlewares:", h.Middlewares)
 
 	//执行路由表
 	routeList := All()
@@ -598,7 +598,13 @@ func (h *Server) Run() {
 			var middlewares []Middleware
 			middlewares = append(middlewares, h.Middlewares...)
 			// 最后添加的先执行
-			middlewares = append(middlewares, responseWrapperMiddleware)
+			routePattern := RoutePatternMiddleware(&contextx.RoutePattern{
+				Path:    pattern,
+				Auth:    route.Pattern.Auth == Enable,
+				Version: route.Pattern.Version,
+			})
+
+			middlewares = append(middlewares, authMiddleware, routePattern, responseWrapperMiddleware)
 			for _, mw := range middlewares {
 				finalHandler = mw(finalHandler)
 			}
