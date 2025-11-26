@@ -8,6 +8,7 @@ import (
 // 私有类型，防止冲突
 type authContextKey struct{}
 type routePatternContextKey struct{}
+type configContextKey struct{}
 
 // auth 结构体
 type Auth struct {
@@ -24,6 +25,25 @@ type RoutePattern struct {
 	Path    string
 	Auth    bool
 	Version int64
+}
+
+type Config struct {
+	NoAuth bool
+	Debug  bool
+}
+
+func SetConfig(r *http.Request, c *Config) *http.Request {
+	ctx := r.Context()
+	ctx = context.WithValue(ctx, configContextKey{}, c)
+	return r.WithContext(ctx)
+}
+
+func GetConfig(r *http.Request) *Config {
+	v := r.Context().Value(configContextKey{})
+	if a, ok := v.(*Config); ok {
+		return a
+	}
+	return nil
 }
 
 // 写入 context 的辅助函数

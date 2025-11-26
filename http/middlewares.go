@@ -26,11 +26,19 @@ func RoutePatternMiddleware(pattern *contextx.RoutePattern) func(http.HandlerFun
 // auth 中间件，解析 auth 并写入 context
 func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("DEBUG: authMiddleware executed - authMiddleware")
+		config := contextx.GetConfig(r)
+		if config.Debug {
+			log.Printf("DEBUG: authMiddleware executed - authMiddleware")
+		}
 		rw := w.(*responseWriter) // 类型断言获取包装器
+		if config.NoAuth {
+			next(w, r)
+			return
+		}
 		routePattern := contextx.GetRoutePattern(r)
 		sig := r.Header.Get(contentSign)
 		pattern := routePattern.Path
+
 		if routePattern.Auth {
 			if sig == "" {
 				errStr := fmt.Sprintf("%s : %s", routePattern.Path, "缺少数据签名")
@@ -139,5 +147,15 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			})
 		}
 		next(w, r)
+	}
+}
+
+// 服务器配置中间件
+func createConfigMiddleware(config *contextx.Config) Middleware {
+	return func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			r = contextx.SetConfig(r, config)
+			next(w, r)
+		}
 	}
 }

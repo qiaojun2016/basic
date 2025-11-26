@@ -68,6 +68,8 @@ type (
 		UserAgent       string      //允许的UserAgent
 		CorsCfg         *CORSConfig // cros配置，web 为 true  有效
 		Middlewares     []Middleware
+		NoAuth          bool
+		Debug           bool
 	}
 
 	CORSConfig struct {
@@ -603,8 +605,8 @@ func (h *Server) Run() {
 				Auth:    route.Pattern.Auth == Enable,
 				Version: route.Pattern.Version,
 			})
-
-			middlewares = append(middlewares, authMiddleware, routePattern, responseWrapperMiddleware)
+			configMiddleware := createConfigMiddleware(&contextx.Config{NoAuth: h.NoAuth, Debug: h.Debug})
+			middlewares = append(middlewares, authMiddleware, routePattern, configMiddleware, responseWrapperMiddleware)
 			for _, mw := range middlewares {
 				finalHandler = mw(finalHandler)
 			}
