@@ -1,19 +1,14 @@
 package http
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/qiaojun2016/basic/cipher"
 	"github.com/qiaojun2016/basic/color"
 	"github.com/qiaojun2016/basic/http/contextx"
 	. "github.com/qiaojun2016/basic/http/route"
 	"github.com/qiaojun2016/basic/id"
 	"github.com/qiaojun2016/basic/ip"
-	"github.com/qiaojun2016/basic/redis"
-	"github.com/qiaojun2016/basic/token"
 	"golang.org/x/time/rate"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"strings"
@@ -68,18 +63,11 @@ type (
 		UserAgent       string      //允许的UserAgent
 		CorsCfg         *CORSConfig // cros配置，web 为 true  有效
 		Middlewares     []Middleware
-		NoAuth          bool
 		Debug           bool
 	}
 
 	CORSConfig struct {
 		AllowedOrigins []string
-	}
-
-	auth struct {
-		Token    string `json:"t"`
-		DeviceId string `json:"d"`
-		Version  int64  `json:"v"`
 	}
 
 	//response 返回数据
@@ -151,40 +139,6 @@ func (i *iPRateLimiter) dump() {
 	}()
 }
 
-func cache(userAuth *auth, pattern string, param, result []byte) {
-	//去掉param的d和t
-	if redis.Redis != nil {
-		//去掉auth
-		param = bytes.Replace(param, []byte(userAuth.Token), []byte{}, 1)
-		param = bytes.Replace(param, []byte(userAuth.DeviceId), []byte{}, 1)
-		if err := redis.Redis.HSet(pattern, string(param), result); err != nil {
-			log.Println(err)
-			return
-		}
-		//log.Println("cached")
-	} else {
-		log.Println("redis not run")
-	}
-}
-
-func getCache(userAuth *auth, pattern string, param []byte) (result []byte, err error) {
-	if redis.Redis != nil {
-		//去掉auth
-		param = bytes.Replace(param, []byte(userAuth.Token), []byte{}, 1)
-		param = bytes.Replace(param, []byte(userAuth.DeviceId), []byte{}, 1)
-		result, err = redis.Redis.HGet(pattern, string(param))
-		if err != nil {
-			log.Println(err)
-			return
-		}
-		//log.Println("hit cache")
-	} else {
-		err = fmt.Errorf("redis not run")
-		log.Println(err)
-	}
-	return
-}
-
 // Run 启动服务
 func (h *Server) Run() {
 	//当不配置的时候，使用以下默认配置
@@ -230,6 +184,7 @@ func (h *Server) Run() {
 		func(pattern string, route Route) {
 
 			handler := func(w http.ResponseWriter, r *http.Request) {
+
 				rw := w.(*responseWriter) // 类型断言获取包装器
 
 				//关闭
@@ -265,6 +220,7 @@ func (h *Server) Run() {
 						return
 					}
 				}
+
 				if h.Web == true {
 					//跨域
 					originSet := make(map[string]struct{}, len(h.CorsCfg.AllowedOrigins))
@@ -279,6 +235,7 @@ func (h *Server) Run() {
 						w.Header().Set("access-control-expose-headers", "Content-Sign")
 						//w.Header().Set("Access-Control-Allow-Credentials", "true")
 					}
+
 					w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 					w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Content-Sign")
 					w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
@@ -289,11 +246,13 @@ func (h *Server) Run() {
 						rw.WriteHeader(http.StatusOK)
 						return
 					}
+
 				}
 
 				//处理header
 				//header := r.Header
 				userAgent := r.Header.Get("User-Agent")
+
 				if h.UserAgent != "" && route.Pattern.UserAgent == Enable {
 					if userAgent != "dev tool" {
 						agent := false
@@ -308,7 +267,9 @@ func (h *Server) Run() {
 							errStr := fmt.Sprintf("%s : %s", pattern, "User-Agent 错误")
 							fmt.Println(errStr)
 							//http.Error(w, errStr, http.StatusForbidden)
+
 							rw.WriteError(http.StatusForbidden, errStr)
+
 							return
 						}
 
@@ -317,162 +278,183 @@ func (h *Server) Run() {
 				}
 
 				//检查签名
-				sig := r.Header.Get(contentSign)
-				if route.Pattern.Auth == Enable {
-					//有认证必须要校验签名
-					if sig == "" {
-						errStr := fmt.Sprintf("%s : %s", pattern, "缺少数据签名")
-						fmt.Println(errStr)
-						//http.Error(w, errStr, http.StatusForbidden)
-						rw.WriteError(http.StatusForbidden, errStr)
-						return
-					}
-				}
+				/*
+					sig := r.Header.Get(contentSign)
+					if route.Pattern.Auth == Enable && !h.NoAuth {
+						//有认证必须要校验签名
+						if sig == "" {
+							errStr := fmt.Sprintf("%s : %s", pattern, "缺少数据签名")
+							fmt.Println(errStr)
+							//http.Error(w, errStr, http.StatusForbidden)
+							rw.WriteError(http.StatusForbidden, errStr)
+							return
+						}
+					}*/
 
 				//请求数据
-				var paramByte []byte
-				var err error
-				//根据方法不同处理参数
-				if r.Method == http.MethodGet { //TODO get没有测试
-					var m = make(map[string]string)
-					for key, value := range r.URL.Query() {
-						m[key] = value[0]
+				/*
+					var paramByte []byte
+					var err error
+					//根据方法不同处理参数
+					if r.Method == http.MethodGet { //TODO get没有测试
+						var m = make(map[string]string)
+						for key, value := range r.URL.Query() {
+							m[key] = value[0]
+						}
+						//TODO 论证这里会不会有错
+						paramByte, err = json.Marshal(m)
+						if err != nil {
+							errStr := fmt.Sprintf("%s : %s", pattern, "读取url参数错误")
+							fmt.Println(errStr)
+							//http.Error(w, errStr, http.StatusInternalServerError)
+							rw.WriteError(http.StatusInternalServerError, errStr)
+							return
+						}
+					} else {
+						//读body
+						r.Body = http.MaxBytesReader(w, r.Body, int64(h.MaxPayloadBytes))
+						paramByte, err = io.ReadAll(r.Body)
+						if err != nil {
+							errStr := fmt.Sprintf("%s : %s", pattern, "读取body错误")
+							fmt.Println(errStr)
+							//http.Error(w, errStr, http.StatusRequestEntityTooLarge)
+							rw.WriteError(http.StatusRequestEntityTooLarge, errStr)
+
+							return
+						}
 					}
-					//TODO 论证这里会不会有错
-					paramByte, err = json.Marshal(m)
+
+					if len(paramByte) == 0 {
+						errStr := fmt.Sprintf("%s : %s", pattern, "body为空")
+						log.Println(errStr)
+						//http.Error(w, errStr, http.StatusNoContent)
+						rw.WriteError(http.StatusNoContent, errStr)
+						return
+					}*/
+
+				//var tId int64
+				//var tSession int64
+				//var ak []byte
+				/*
+					userAuth := &auth{}
+					//提取 token、deviceId、version
+					err = json.Unmarshal(paramByte, userAuth)
 					if err != nil {
-						errStr := fmt.Sprintf("%s : %s", pattern, "读取url参数错误")
+						errStr := fmt.Sprintf("%s : %s", pattern, err)
 						fmt.Println(errStr)
 						//http.Error(w, errStr, http.StatusInternalServerError)
 						rw.WriteError(http.StatusInternalServerError, errStr)
 						return
-					}
-				} else {
-					//读body
-					r.Body = http.MaxBytesReader(w, r.Body, int64(h.MaxPayloadBytes))
-					paramByte, err = ioutil.ReadAll(r.Body)
-					if err != nil {
-						errStr := fmt.Sprintf("%s : %s", pattern, "读取body错误")
-						fmt.Println(errStr)
-						//http.Error(w, errStr, http.StatusRequestEntityTooLarge)
-						rw.WriteError(http.StatusRequestEntityTooLarge, errStr)
-
-						return
-					}
-				}
-
-				if len(paramByte) == 0 {
-					errStr := fmt.Sprintf("%s : %s", pattern, "body为空")
-					fmt.Println(errStr)
-					//http.Error(w, errStr, http.StatusNoContent)
-					rw.WriteError(http.StatusNoContent, errStr)
-					return
-				}
-
-				var tId int64
-				var tSession int64
-				var ak []byte
-
-				userAuth := &auth{}
-				//提取 token、deviceId、version
-				err = json.Unmarshal(paramByte, userAuth)
-				if err != nil {
-					errStr := fmt.Sprintf("%s : %s", pattern, err)
-					fmt.Println(errStr)
-					//http.Error(w, errStr, http.StatusInternalServerError)
-					rw.WriteError(http.StatusInternalServerError, errStr)
-					return
-				}
+					}*/
 
 				//判断版本
-				if userAuth.Version < route.Pattern.Version {
-					//客户端版本太低
-					errStr := fmt.Sprintf(
-						"client version is %d, server version is %d. version is too low.",
-						userAuth.Version, route.Pattern.Version,
-					)
-					fmt.Println(errStr)
-					//http.Error(w, errStr, http.StatusGone)
-					rw.WriteError(http.StatusGone, errStr)
-					return
-				}
+				/*
+					if userAuth.Version < route.Pattern.Version {
+						//客户端版本太低
+						errStr := fmt.Sprintf(
+							"client version is %d, server version is %d. version is too low.",
+							userAuth.Version, route.Pattern.Version,
+						)
+						fmt.Println(errStr)
+						//http.Error(w, errStr, http.StatusGone)
+						rw.WriteError(http.StatusGone, errStr)
+						return
+					}*/
 
 				//认证
-				if route.Pattern.Auth == Enable { //启用认证
-					if userAuth.Token == "" {
-						errStr := fmt.Sprintf("%s : %s", pattern, "缺少令牌")
-						fmt.Println(errStr)
-						///http.Error(w, errStr, http.StatusNotAcceptable)
-						rw.WriteError(http.StatusNotAcceptable, errStr)
-						return
-					}
-
-					//提起令牌内容
-					tk := token.Token{}
-					err = tk.Decode(userAuth.Token)
-					if err != nil {
-						errStr := fmt.Sprintf("%s : %s", pattern, "令牌错误")
-						fmt.Println(errStr)
-						//http.Error(w, errStr, http.StatusNotAcceptable)
-						rw.WriteError(http.StatusNotAcceptable, errStr)
-						return
-					}
-
-					tId = tk.Id
-					tSession = tk.Session()
-					ak = []byte(tk.AccessKeyID())
-
-					//校验签名
-					if !cipher.CheckSign(sig, paramByte, ak) {
-						errStr := fmt.Sprintf("%s : %s", pattern, "指纹检验失败")
-						fmt.Println(errStr)
-						//http.Error(w, errStr, http.StatusNotAcceptable)
-						rw.WriteError(http.StatusNotAcceptable, errStr)
-						return
-					}
-
-				}
-
-				//var jsonErr error
-
-				// 查找缓存，缓存一定是正确的结果
-				if route.Pattern.Cache == Enable {
-					//var bytes []byte
-					result, cacheErr := getCache(userAuth, pattern, paramByte)
-					//没找到
-					if cacheErr != nil {
-						//缓存穿透
-						log.Println(fmt.Sprintf("%s : %s", pattern, "Cache Penetration"))
-						log.Println(cacheErr)
-					} else {
-						//找到了
-						if route.Pattern.General == Enable {
-							//通用不格式直接输出
-							//输出
-							_, err = w.Write(result)
-							if err != nil {
-								errStr := fmt.Sprintf("%s : %s", pattern, err)
-								fmt.Println(errStr)
-								return
-							}
-						} else {
-							//签名输出
-							if route.Pattern.Auth == Enable {
-								responseSig := cipher.Sign(result, ak)
-								//写入header
-								w.Header().Set(contentSign, responseSig)
-							}
-							w.WriteHeader(http.StatusOK)
-							_, err = w.Write(result)
-							if err != nil {
-								errStr := fmt.Sprintf("%s : %s", pattern, err)
-								log.Println(errStr)
-								return
-							}
+				/*
+					if route.Pattern.Auth == Enable { //启用认证
+						if userAuth.Token == "" {
+							errStr := fmt.Sprintf("%s : %s", pattern, "缺少令牌")
+							fmt.Println(errStr)
+							///http.Error(w, errStr, http.StatusNotAcceptable)
+							rw.WriteError(http.StatusNotAcceptable, errStr)
+							return
 						}
-						return
-					}
+
+						//提起令牌内容
+						tk := token.Token{}
+						err = tk.Decode(userAuth.Token)
+						if err != nil {
+							errStr := fmt.Sprintf("%s : %s", pattern, "令牌错误")
+							fmt.Println(errStr)
+							//http.Error(w, errStr, http.StatusNotAcceptable)
+							rw.WriteError(http.StatusNotAcceptable, errStr)
+							return
+						}
+
+						tId = tk.Id
+						tSession = tk.Session()
+						ak = []byte(tk.AccessKeyID())
+
+						//校验签名
+						if !cipher.CheckSign(sig, paramByte, ak) {
+							errStr := fmt.Sprintf("%s : %s", pattern, "指纹检验失败")
+							fmt.Println(errStr)
+							//http.Error(w, errStr, http.StatusNotAcceptable)
+							rw.WriteError(http.StatusNotAcceptable, errStr)
+							return
+						}
+
+					}*/
+
+				a := contextx.GetAuth(r)
+				uid := ""
+				session := ""
+				if a != nil {
+					uid = id.SId.ToString(a.Uid)
+					session = id.SId.ToString(a.Session)
+					session = id.SId.ToString(a.Session)
 				}
+				paramByte := contextx.GetRequestBody(r)
+				log.Println("http handler", string(paramByte))
+				var err error
+				/*
+					userAuth := &auth{
+						Token:    a.Token,
+						DeviceId: a.DeviceId,
+						Version:  a.Version,
+					}
+					//var jsonErr error
+
+					// 查找缓存，缓存一定是正确的结果
+					if route.Pattern.Cache == Enable {
+						//var bytes []byte
+						result, cacheErr := getCache(userAuth, pattern, paramByte)
+						//没找到
+						if cacheErr != nil {
+							//缓存穿透
+							log.Println(fmt.Sprintf("%s : %s", pattern, "Cache Penetration"))
+							log.Println(cacheErr)
+						} else {
+							//找到了
+							if route.Pattern.General == Enable {
+								//通用不格式直接输出
+								//输出
+								_, err = w.Write(result)
+								if err != nil {
+									errStr := fmt.Sprintf("%s : %s", pattern, err)
+									fmt.Println(errStr)
+									return
+								}
+							} else {
+								//签名输出
+								if route.Pattern.Auth == Enable {
+									responseSig := cipher.Sign(result, a.Ak)
+									//写入header
+									w.Header().Set(contentSign, responseSig)
+								}
+								w.WriteHeader(http.StatusOK)
+								_, err = w.Write(result)
+								if err != nil {
+									errStr := fmt.Sprintf("%s : %s", pattern, err)
+									log.Println(errStr)
+									return
+								}
+							}
+							return
+						}
+					}*/
 
 				//执行
 				var result interface{}
@@ -486,13 +468,13 @@ func (h *Server) Run() {
 
 				//Handle
 				if userAgentHandle != nil {
-					result, err = userAgentHandle(userAgent, id.SId.ToString(tId), paramByte)
+					result, err = userAgentHandle(userAgent, uid, paramByte)
 				} else if sessionHandle != nil {
-					result, err = sessionHandle(id.SId.ToString(tSession), paramByte)
+					result, err = sessionHandle(session, paramByte)
 				} else if ipHandle != nil {
-					result, err = ipHandle(realIp, id.SId.ToString(tId), paramByte)
+					result, err = ipHandle(realIp, uid, paramByte)
 				} else {
-					result, err = route.Handle()(id.SId.ToString(tId), paramByte)
+					result, err = route.Handle()(uid, paramByte)
 				}
 
 				// 通用不格式直接输出
@@ -523,16 +505,17 @@ func (h *Server) Run() {
 						return
 					}
 					if route.ContentType != "" {
-						w.Header().Set("Content-Type", route.ContentType)
+						rw.Header().Set("Content-Type", route.ContentType)
 					}
 					rw.WriteHeader(http.StatusOK)
 					//w.WriteHeader(http.StatusOK)
 
 					//缓存
 					res := result.([]byte)
-					if route.Pattern.Cache == Enable {
-						cache(userAuth, pattern, paramByte, res)
-					}
+					/*
+						if route.Pattern.Cache == Enable {
+							cache(userAuth, pattern, paramByte, res)
+						}*/
 					//输出
 					_, err = rw.Write(res)
 
@@ -564,9 +547,10 @@ func (h *Server) Run() {
 					})
 
 					//缓存
-					if route.Pattern.Cache == Enable {
-						cache(userAuth, pattern, paramByte, jsonBytes)
-					}
+					/*
+						if route.Pattern.Cache == Enable {
+							cache(userAuth, pattern, paramByte, jsonBytes)
+						} */
 				}
 
 				//json错误
@@ -581,11 +565,12 @@ func (h *Server) Run() {
 				//TODO 判断是否使用gzip
 
 				//计算hmac
-				if route.Pattern.Auth == Enable {
-					responseSig := cipher.Sign(jsonBytes, ak)
-					//写入header
-					w.Header().Set(contentSign, responseSig)
-				}
+				/*
+					if route.Pattern.Auth == Enable && !h.NoAuth {
+						responseSig := cipher.Sign(jsonBytes, a.Ak)
+						//写入header
+						w.Header().Set(contentSign, responseSig)
+					}*/
 				rw.WriteHeader(http.StatusOK)
 				//写出结果
 				_, err = rw.Write(jsonBytes)
@@ -600,13 +585,25 @@ func (h *Server) Run() {
 			var middlewares []Middleware
 			middlewares = append(middlewares, h.Middlewares...)
 			// 最后添加的先执行
-			routePattern := RoutePatternMiddleware(&contextx.RoutePattern{
-				Path:    pattern,
-				Auth:    route.Pattern.Auth == Enable,
-				Version: route.Pattern.Version,
-			})
-			configMiddleware := createConfigMiddleware(&contextx.Config{NoAuth: h.NoAuth, Debug: h.Debug})
-			middlewares = append(middlewares, authMiddleware, routePattern, configMiddleware, responseWrapperMiddleware)
+			rp := &contextx.RoutePattern{
+				Pattern:     pattern,
+				Auth:        route.Pattern.Auth,
+				Cache:       route.Pattern.Cache,
+				CacheExpire: route.Pattern.CacheExpire,
+				Encrypt:     route.Pattern.Encrypt,
+				UserAgent:   route.Pattern.UserAgent,
+				General:     route.Pattern.General,
+				Version:     route.Pattern.Version,
+			}
+			configMiddleware := createConfigMiddleware(&contextx.Config{Debug: h.Debug}, rp)
+			middlewares = append(
+				middlewares,
+				ResponseCacheMiddleware,
+				BodySigningMiddleware,
+				authMiddleware,
+				BodyParsingMiddleware,
+				configMiddleware,
+				responseWrapperMiddleware)
 			for _, mw := range middlewares {
 				finalHandler = mw(finalHandler)
 			}
