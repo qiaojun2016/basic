@@ -59,9 +59,7 @@ func BodyParsingMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		r.Body = io.NopCloser(bytes.NewBuffer(paramByte))
 
 		r = contextx.SetRequestBody(r, paramByte)
-		log.Println("DEBUG:   BodyParsingMiddleware body", string(paramByte))
 		next(w, r)
-		log.Printf("DEBUG:   BodyParsingMiddleware completed")
 	}
 }
 
