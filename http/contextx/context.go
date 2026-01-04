@@ -100,3 +100,17 @@ func GetRequestBody(r *http.Request) []byte {
 	}
 	return nil
 }
+
+func SetLogger(r *http.Request, debug bool) *http.Request {
+	l := &Logger{debug: debug}
+	ctx := context.WithValue(r.Context(), "logger_key", l)
+	return r.WithContext(ctx)
+}
+
+func L(ctx context.Context) *Logger {
+	if l, ok := ctx.Value("logger_key").(*Logger); ok {
+		return l
+	}
+	// 返回一个默认的，防止空指针
+	return &Logger{debug: false}
+}

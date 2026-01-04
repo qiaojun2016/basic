@@ -2,7 +2,6 @@ package http
 
 import (
 	"github.com/qiaojun2016/basic/http/contextx"
-	"log"
 	"net/http"
 )
 
@@ -12,9 +11,8 @@ func createConfigMiddleware(config *contextx.Config, pattern *contextx.RoutePatt
 		return func(w http.ResponseWriter, r *http.Request) {
 			r = contextx.SetConfig(r, config)
 			r = contextx.SetRoutePattern(r, pattern)
-			log.Printf("DEBUG: createConfigMiddleware executed")
+			r = contextx.SetLogger(r, config.Debug) // 注入
 			next(w, r)
-			log.Printf("DEBUG: createConfigMiddleware completed")
 		}
 	}
 }
