@@ -1,7 +1,6 @@
 package mysql
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
@@ -157,34 +156,4 @@ func GetDbExec() DBExec {
 }
 func GetDb() *sqlx.DB {
 	return mysqlDB
-}
-
-// WithTransaction 自动获取 DB 并在事务中执行逻辑
-func WithTransaction(ctx context.Context, fn func(tx *sqlx.Tx) error) (err error) {
-	db := GetDb() // 内部直接获取连接
-
-	// 1. 开启支持 Context 的事务
-	tx, err := db.BeginTxx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin transaction failed: %w", err)
-	}
-
-	// 2. 统一管理事务结果
-	defer func() {
-		if p := recover(); p != nil {
-			tx.Rollback()
-			log.Printf("Panic recovered in transaction: %v", p)
-			panic(p) // 重新抛出 panic 以便外部中间件捕获
-		} else if err != nil {
-			tx.Rollback() // 业务报错，回滚
-		} else {
-			if commitErr := tx.Commit(); commitErr != nil {
-				err = fmt.Errorf("commit transaction failed: %w", commitErr)
-			}
-		}
-	}()
-
-	// 3. 执行业务逻辑
-	err = fn(tx)
-	return err
 }
