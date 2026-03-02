@@ -64,7 +64,8 @@ type (
 		CorsCfg         *CORSConfig // cros配置，web 为 true  有效
 		Middlewares     []Middleware
 		Debug           bool
-		LogTiming       bool //是否记录请求耗时
+		LogTiming          bool  //是否记录请求耗时
+		LogTimingThreshold int64 //耗时超过多少ms才打印，0表示全部打印
 	}
 
 	CORSConfig struct {
@@ -379,7 +380,7 @@ func (h *Server) Run() {
 				authMiddleware,
 				BodyParsingMiddleware,
 				configMiddleware,
-				createResponseWrapperMiddleware(pattern, h.LogTiming),
+				createResponseWrapperMiddleware(pattern, h.LogTiming, h.LogTimingThreshold),
 			)
 			if h.Web {
 				middlewares = append(middlewares, CORSMiddleware(h.CorsCfg))

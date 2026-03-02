@@ -103,7 +103,7 @@ func (rw *responseWriter) Flush() {
 }
 
 // 响应包装器中间件
-func createResponseWrapperMiddleware(pattern string, logTiming bool) Middleware {
+func createResponseWrapperMiddleware(pattern string, logTiming bool, logTimingThreshold int64) Middleware {
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			rw := newResponseWriter(w)
@@ -111,11 +111,14 @@ func createResponseWrapperMiddleware(pattern string, logTiming bool) Middleware 
 			// 发送全部响应结果
 			rw.Flush()
 			if logTiming {
-				log.Printf("[HTTP] %s %d %dms",
-					pattern,
-					rw.statusCode,
-					time.Since(rw.startTime).Milliseconds(),
-				)
+				elapsed := time.Since(rw.startTime).Milliseconds()
+				if elapsed >= logTimingThreshold {
+					log.Printf("[HTTP] %s %d %dms",
+						pattern,
+						rw.statusCode,
+						elapsed,
+					)
+				}
 			}
 		}
 	}
