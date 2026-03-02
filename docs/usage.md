@@ -9,6 +9,20 @@
 - [安装](#安装)
 - [初始化模式](#初始化模式)
 - [HTTP 框架](#http-框架)
+  - [Server 配置字段](#server-配置字段)
+  - [启动服务](#启动服务)
+  - [路由注册](#路由注册)
+  - [Pattern 配置](#pattern-配置)
+  - [请求 / 响应格式](#请求--响应格式)
+  - [请求耗时日志](#请求耗时日志logliming)
+  - [Debug 模式](#debug-模式)
+  - [IP 限流](#ip-限流)
+  - [CORS 跨域](#cors-跨域)
+  - [User-Agent 校验](#user-agent-校验)
+  - [响应缓存](#响应缓存)
+  - [自定义全局中间件](#自定义全局中间件)
+  - [从 Context 获取请求信息](#从-context-获取请求信息)
+  - [中间件执行顺序](#中间件执行顺序)
 - [verify — 参数解析与校验](#verify--参数解析与校验)
 - [MySQL](#mysql)
 - [Redis](#redis)
@@ -53,37 +67,93 @@ redis.Server{Addr: "localhost:6379"}.Run()
 
 ## HTTP 框架
 
+### Server 配置字段
+
+```go
+basicHttp.Server{
+    Addr            string      // 监听地址，默认 ":80"
+    MaxPayloadBytes int         // 请求体最大字节数，默认 1MB（1<<20）
+    MaxHeaderBytes  int         // 请求头最大字节数，默认 1MB
+    Rate            rate.Limit  // IP 限流：每秒向令牌桶放入的令牌数，默认 10，-1 关闭限流
+    Burst           int         // IP 限流：令牌桶容量，默认 15，-1 关闭限流
+    ReadTimeout     int         // 读超时（秒），默认 5
+    WriteTimeout    int         // 写超时（秒），默认 5
+    Web             bool        // 是否开启 CORS，配合 CorsCfg 使用
+    CorsCfg         *CORSConfig // CORS 白名单配置，Web=true 时有效
+    UserAgent       string      // 允许的 User-Agent，支持 "prefix-*" 通配符
+    Middlewares     []Middleware // 全局自定义中间件，通过 UseGlobal() 添加
+    LogTiming       bool        // 是否打印每个请求的耗时日志
+    Debug           bool        // 是否打印中间件 DEBUG 日志
+}
+```
+
 ### 启动服务
 
 ```go
 import (
     basicHttp "github.com/qiaojun2016/basic/http"
-    _ "yourproject/api_http" // 触发路由注册的 init()
+    _ "yourproject/api_http" // 通过空白导入触发路由注册的 init()
+    _ "yourproject/task"
 )
 
 func main() {
-    // ... 其他模块初始化 ...
+    id.Server{Node: 1}.Run()
+    mysql.Server{DataSource: "..."}.Run()
+    redis.Server{Addr: ":6379"}.Run()
 
     s := &basicHttp.Server{
         Addr:      ":8080",
-        Web:       true, // 开启 CORS
+        Web:       true,
         CorsCfg: &basicHttp.CORSConfig{
             AllowedOrigins: []string{
                 "https://yourdomain.com",
+                "http://localhost:3000",
             },
         },
-        UserAgent: "yourapp-*",  // 限制 User-Agent 前缀，* 为通配符
-        Rate:      10,           // 每秒令牌数（IP 限流）
-        Burst:     15,           // 令牌桶容量
-        LogTiming: true,         // 开启请求耗时日志
-        Debug:     false,        // 开启后输出中间件 DEBUG 日志
-    }.Run()
+        UserAgent:  "myapp-*",
+        Rate:       10,
+        Burst:      15,
+        LogTiming:  true,
+    }
+    s.Run()
 }
 ```
 
-### 注册路由
+---
 
-路由通常在各业务模块的 `init()` 中注册，通过空白导入触发：
+### 路由注册
+
+路由在各业务模块的 `init()` 中注册，main.go 通过空白导入触发。同一 URL 重复注册会 panic。
+
+#### 4 种 handle 签名
+
+根据业务需要选择一种，同一路由只能注册一种。当一个路由同时需要多种信息时优先使用 `IpRegister`（含 uid）。
+
+```go
+// 1. 标准：uid + body（最常用）
+route.Route{Url: "/api/user/info"}.Register(
+    func(uid string, body []byte) (interface{}, error) { ... },
+)
+
+// 2. 携带客户端真实 IP：ip + uid + body
+route.Route{Url: "/api/log/visit"}.IpRegister(
+    func(ip, uid string, body []byte) (interface{}, error) { ... },
+)
+
+// 3. 携带 session：session + body
+route.Route{Url: "/api/session/check"}.SessionRegister(
+    func(session string, body []byte) (interface{}, error) { ... },
+)
+
+// 4. 携带 User-Agent：agent + uid + body
+route.Route{Url: "/api/user/login"}.UserAgentRegister(
+    func(agent, uid string, body []byte) (interface{}, error) { ... },
+)
+```
+
+> `uid`、`session` 均为 Base58 编码的字符串（非 int64）。Auth 关闭时 `uid` 为空字符串。
+
+#### 完整注册示例
 
 ```go
 // api_http/user.go
@@ -92,137 +162,338 @@ package api_http
 import (
     "github.com/qiaojun2016/basic/http/route"
     "github.com/qiaojun2016/basic/verify"
+    "yourproject/service/db"
 )
 
 func init() {
-    // 标准 handle：参数为 uid（Base58 字符串）+ 请求体 JSON
+    // 需要认证的接口（默认）
     route.Route{Url: "/api/user/info"}.Register(
         func(uid string, body []byte) (interface{}, error) {
-            req := &InfoReq{}
+            req := &db.UserInfoReq{}
             if err := verify.Unmarshal(body, req); err != nil {
                 return nil, err
             }
-            return db.GetUserInfo(uid, req)
+            return db.GetUserInfo(uid)
         },
     )
 
-    // 携带客户端 IP 的 handle
-    route.Route{Url: "/api/log/visit"}.IpRegister(
-        func(ip, uid string, body []byte) (interface{}, error) {
-            return db.RecordVisit(ip, uid)
+    // 不需要认证的公开接口
+    route.Route{
+        Url: "/api/public/config",
+        Pattern: route.Pattern{
+            Auth:      route.AuthDisable,
+            UserAgent: route.UserAgentDisable,
         },
-    )
-
-    // 携带 session 的 handle
-    route.Route{Url: "/api/session/check"}.SessionRegister(
-        func(session string, body []byte) (interface{}, error) {
-            return db.CheckSession(session)
-        },
-    )
-
-    // 携带 User-Agent 的 handle
-    route.Route{Url: "/api/user/login"}.UserAgentRegister(
-        func(agent, uid string, body []byte) (interface{}, error) {
-            return db.Login(agent)
+    }.Register(
+        func(_ string, body []byte) (interface{}, error) {
+            return db.GetPublicConfig()
         },
     )
 }
 ```
 
+---
+
 ### Pattern 配置
 
-通过 `route.Route.Pattern` 控制路由行为，未设置时使用默认值：
+每个路由通过 `Pattern` 字段控制中间件行为，所有字段均有默认值：
+
+| 字段 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `Auth` | PatternType | `Enable`（开启） | token 认证 + HMAC 签名校验 |
+| `Cache` | PatternType | `CacheDisable`（关闭） | 响应结果缓存到 Redis |
+| `CacheExpire` | int64 | 0（不过期） | 缓存秒数，Cache 开启时有效 |
+| `Encrypt` | PatternType | `EncryptDisable`（关闭） | 响应加密（保留字段）|
+| `UserAgent` | PatternType | `Enable`（开启） | 校验请求的 User-Agent |
+| `General` | PatternType | `GeneralDisable`（关闭） | 通用模式，handler 返回 `[]byte` |
+| `Version` | int64 | 0（不限制） | 要求客户端版本号 >= 此值 |
 
 ```go
 route.Route{
-    Url: "/api/public/list",
+    Url: "/api/rank/list",
     Pattern: route.Pattern{
-        Auth:    route.AuthDisable,    // 关闭 token 认证（默认开启）
-        Cache:   route.Enable,         // 开启 Redis 响应缓存（默认关闭）
-        CacheExpire: 300,              // 缓存过期秒数（Cache 开启时有效）
-        UserAgent: route.UserAgentDisable, // 关闭 UserAgent 校验（默认开启）
-        General: route.Enable,         // 通用模式，handler 必须返回 []byte（默认关闭）
-        Version: 2,                    // 要求客户端版本 >= 2（默认 0 不限制）
+        Auth:        route.Enable,         // 需要认证（可省略，是默认值）
+        Cache:       route.Enable,         // 开启缓存
+        CacheExpire: 60,                   // 缓存 60 秒
+        UserAgent:   route.UserAgentDisable, // 不校验 UA（如 H5 页面访问）
+        Version:     3,                    // 要求客户端版本 >= 3
     },
 }.Register(handler)
 ```
 
+---
+
 ### 请求 / 响应格式
 
-**请求（需认证的路由）：**
-```json
-// Header
-Content-Sign: <HMAC-SHA256 签名>
+#### 认证路由（Auth=Enable）
 
-// Body JSON
-{
-    "t": "<token>",
-    "d": "<deviceId>",
-    "v": 1,
-    "field1": "value1"
-}
+**请求：**
+```
+Header:
+  Content-Sign: <HMAC-SHA256(body字节, accessKeyID)>
+
+Body JSON:
+  {
+    "t": "<token>",       // 登录后获得的 token
+    "d": "<deviceId>",    // 设备 ID
+    "v": 1,               // 客户端版本号
+    ...业务字段
+  }
 ```
 
 **响应：**
-```json
-// 成功
-{"version": 1, "state": "OK", "data": {...}}
+```
+Header:
+  Content-Sign: <HMAC-SHA256(响应body字节, accessKeyID)>
 
-// 失败（handler 返回 error）
-{"version": 1, "state": "错误描述", "data": null}
+Body JSON（成功）:
+  {"version": 1, "state": "OK", "data": {...}}
+
+Body JSON（失败，handler 返回 error）:
+  {"version": 1, "state": "错误原因", "data": null}
 ```
 
-**General 模式**（`General: route.Enable`）：handler 返回 `[]byte`，框架直接写出，不包装 JSON 格式，适合文件下载、SSE 等场景：
+#### 非认证路由（Auth=AuthDisable）
+
+无需 `Content-Sign` header，body 中也无需 `t`/`d`/`v` 字段，可以为空 body 或纯业务 JSON：
+
+```
+Body JSON:
+  {"phone": "138xxxx", "code": "123456"}
+```
+
+#### General 模式（General=Enable）
+
+handler 必须返回 `[]byte`，框架直接写入响应体，不包装 JSON 格式，适用于文件下载、图片输出等：
 
 ```go
 route.Route{
-    Url:         "/api/export",
+    Url:         "/api/file/download",
     ContentType: "application/octet-stream",
-    Pattern:     route.Pattern{General: route.Enable},
+    Pattern: route.Pattern{
+        General: route.Enable,
+    },
 }.Register(func(uid string, body []byte) (interface{}, error) {
-    data := generateFile()
-    return data, nil // 必须返回 []byte
+    fileBytes, err := readFile()
+    if err != nil {
+        return nil, err
+    }
+    return fileBytes, nil // 必须是 []byte
 })
 ```
+
+---
+
+### 请求耗时日志（LogTiming）
+
+开启 `LogTiming: true` 后，每个请求完成时自动打印：
+
+```go
+s := &basicHttp.Server{
+    Addr:      ":8080",
+    LogTiming: true,
+}
+```
+
+输出格式：
+```
+[HTTP] /api/user/login 200 43ms
+[HTTP] /api/score/list 200 128ms
+[HTTP] /api/user/info 401 2ms
+```
+
+字段说明：路由 URL、HTTP 状态码、完整处理耗时（从接收请求到响应写出）。
+
+---
+
+### Debug 模式
+
+开启 `Debug: true` 后，每个请求会打印各中间件的执行日志，用于排查中间件调用顺序问题：
+
+```go
+s := &basicHttp.Server{
+    Addr:  ":8080",
+    Debug: true,
+}
+```
+
+输出示例：
+```
+DEBUG: BodyParsingMiddleware executed
+DEBUG: BodySigningMiddleware executed
+DEBUG: ResponseCacheMiddleware executed
+DEBUG: ResponseCacheMiddleware completed
+DEBUG: BodySigningMiddleware completed
+```
+
+> Debug 日志仅在开发环境开启，生产环境关闭以避免性能损耗和日志污染。
+
+---
+
+### IP 限流
+
+框架内置基于令牌桶的 IP 级限流，两级防护：
+
+| 级别 | 触发条件 | 响应 |
+|---|---|---|
+| 高频封禁 | 10 分钟内同一 IP 请求超过 2000 次 | 429，返回错误信息 |
+| 令牌桶 | 请求速率超过 `Rate` 令牌/秒 | 429，无 body 直接丢弃 |
+
+```go
+s := &basicHttp.Server{
+    Rate:  10,   // 每秒产生 10 个令牌
+    Burst: 15,   // 桶最多存 15 个令牌，允许短暂突发
+}
+```
+
+设置 `Rate: -1, Burst: -1` 可完全关闭限流（适合内网服务）。
+
+每 10 分钟自动清理：超过 10 分钟未活跃的 IP 记录删除，活跃 IP 计数归零。
+
+---
+
+### CORS 跨域
+
+```go
+s := &basicHttp.Server{
+    Web: true, // 必须开启
+    CorsCfg: &basicHttp.CORSConfig{
+        AllowedOrigins: []string{
+            "https://app.example.com",
+            "http://localhost:3000",
+        },
+    },
+}
+```
+
+- 仅 `AllowedOrigins` 中的域名可获得 `Access-Control-Allow-Origin` 响应头
+- 自动处理 OPTIONS 预检请求（返回 204）
+- 自动暴露 `Content-Sign` 头（供客户端读取响应签名）
+
+---
+
+### User-Agent 校验
+
+```go
+s := &basicHttp.Server{
+    UserAgent: "myapp-*", // 允许所有 "myapp-" 前缀的 UA
+}
+// 或精确匹配
+s := &basicHttp.Server{
+    UserAgent: "myapp/1.0",
+}
+```
+
+- `"prefix-*"` 格式：匹配所有以 `prefix-` 开头的 UA
+- 精确字符串：完全匹配
+- UA 为 `"dev tool"` 时始终放行（便于开发调试）
+- 单个路由可通过 `Pattern.UserAgent = route.UserAgentDisable` 跳过校验
+
+---
+
+### 响应缓存
+
+开启缓存需要 Redis 已初始化（`redis.Server{...}.Run()`）：
+
+```go
+route.Route{
+    Url: "/api/rank/top10",
+    Pattern: route.Pattern{
+        Cache:       route.Enable,
+        CacheExpire: 300, // 5 分钟
+    },
+}.Register(handler)
+```
+
+**缓存 key 规则：** 以路由 URL 为 Hash key，以请求 body（去掉 `t` 和 `d` 字段后）为 Hash field。不同用户携带相同业务参数时命中同一缓存。
+
+---
 
 ### 自定义全局中间件
 
+`UseGlobal` 添加的中间件在**所有路由**上生效，在内置中间件链（认证、签名、缓存等）之外执行：
+
 ```go
-s := &basicHttp.Server{...}
+s := &basicHttp.Server{Addr: ":8080"}
+
+// 示例：请求日志中间件
 s.UseGlobal(func(next http.HandlerFunc) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
-        // 在 handler 前执行
+        log.Printf("-> %s %s", r.Method, r.URL.Path)
         next(w, r)
-        // 在 handler 后执行
+        log.Printf("<- %s %s done", r.Method, r.URL.Path)
     }
 })
+
 s.Run()
 ```
 
+> 多次调用 `UseGlobal` 可添加多个中间件，执行顺序与添加顺序相同。
+
+---
+
 ### 从 Context 获取请求信息
 
-在自定义中间件中可从 context 读取框架注入的数据：
+框架通过 `context` 在中间件和 handler 之间传递数据，在自定义中间件中可按需读取：
 
 ```go
 import "github.com/qiaojun2016/basic/http/contextx"
 
-// 获取已认证的用户信息
-auth := contextx.GetAuth(r)
-if auth != nil {
-    auth.Uid     // int64 用户 ID
-    auth.Session // int64 session ID
-    auth.Ak      // []byte HMAC 密钥
-    auth.Token   // string 原始 token
+func myMiddleware(next http.HandlerFunc) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        // 获取已认证的用户信息（Auth=Enable 且认证通过后才有值）
+        auth := contextx.GetAuth(r)
+        if auth != nil {
+            auth.Uid     // int64 用户 ID
+            auth.Session // int64 session ID
+            auth.Ak      // []byte HMAC 密钥
+            auth.Token   // string 原始 token 字符串
+        }
+
+        // 获取请求体（BodyParsingMiddleware 执行后才有值）
+        body := contextx.GetRequestBody(r)
+
+        // 获取路由 Pattern 配置
+        rp := contextx.GetRoutePattern(r)
+        rp.Pattern // 路由 URL，如 "/api/user/info"
+        rp.Auth    // Auth 标志
+        rp.Cache   // Cache 标志
+
+        // 获取服务配置
+        cfg := contextx.GetConfig(r)
+        cfg.Debug  // bool
+
+        next(w, r)
+    }
 }
-
-// 获取请求体（已读取，可重复获取）
-body := contextx.GetRequestBody(r)
-
-// 获取路由 Pattern 配置
-rp := contextx.GetRoutePattern(r)
-rp.Pattern // 路由路径
-rp.Auth    // Auth 标志
 ```
+
+---
+
+### 中间件执行顺序
+
+了解执行顺序有助于在正确位置读取 context 数据：
+
+```
+请求到达
+  │
+  ├─ IP 限流（高频封禁 + 令牌桶）          ← 最先，在所有中间件之外
+  │
+  ▼ 进入中间件链
+  1. CORSMiddleware                        ← Web=true 时
+  2. responseWrapperMiddleware             ← 创建缓冲 ResponseWriter；Flush() 写出响应；LogTiming 在此输出
+  3. configMiddleware                      ← 注入 Config、RoutePattern 到 context
+  4. BodyParsingMiddleware                 ← 读取并缓存请求体到 context
+  5. authMiddleware                        ← 解析 token、校验版本、校验 HMAC（Auth=Enable 时）
+  6. BodySigningMiddleware                 ← 调用 next 后对响应体签名（Auth=Enable 时）
+  7. ResponseCacheMiddleware               ← 命中缓存直接返回；否则执行 next 后写入缓存
+  8. UseGlobal 自定义中间件               ← 按添加顺序
+  │
+  ▼
+  核心 handler（业务代码）
+```
+
+> 在自定义中间件中使用 `contextx.GetAuth(r)` 时，此时 `authMiddleware` 已执行完毕，可以安全读取。
 
 ---
 
