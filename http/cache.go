@@ -14,24 +14,25 @@ import (
 // 响应包装器中间件
 func ResponseCacheMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("DEBUG: ResponseCacheMiddleware executed -  ResponseCacheMiddleware")
 		rp := contextx.GetRoutePattern(r)
-
+		config := contextx.GetConfig(r)
+		if config != nil && config.Debug {
+			log.Printf("DEBUG: ResponseCacheMiddleware executed")
+		}
 		paramByte := contextx.GetRequestBody(r)
 		rw := w.(*responseWriter) // 类型断言获取包装器
 		if rp.Cache == route.Enable {
 			userAuth := model.FromContextAuth(contextx.GetAuth(r))
-			//var bytes []byte
 			result, cacheErr := getCache(userAuth, rp.Pattern, paramByte)
-			//没找到
 			if cacheErr != nil {
 				//缓存穿透
 				log.Println(fmt.Sprintf("%s : %s", rp.Pattern, "Cache Penetration"))
 				log.Println(cacheErr)
 				next.ServeHTTP(w, r)
-				// 缓存
 				cache(userAuth, rp.Pattern, paramByte, rw.body.Bytes())
-				log.Printf("DEBUG:  ResponseCacheMiddleware cache completed")
+				if config != nil && config.Debug {
+					log.Printf("DEBUG: ResponseCacheMiddleware cache written")
+				}
 			} else {
 				// 找到了直接返回
 				rw.WriteHeader(http.StatusOK)
@@ -44,10 +45,11 @@ func ResponseCacheMiddleware(next http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 		} else {
-			log.Printf("DEBUG: ResponseCacheMiddleware  ServeHTTP")
 			next.ServeHTTP(w, r)
 		}
-		log.Printf("DEBUG:  ResponseCacheMiddleware completed")
+		if config != nil && config.Debug {
+			log.Printf("DEBUG: ResponseCacheMiddleware completed")
+		}
 	}
 }
 

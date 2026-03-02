@@ -105,11 +105,9 @@ func (rw *responseWriter) Flush() {
 // 响应包装器中间件
 func responseWrapperMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("DEBUG: responseWrapperMiddleware executed - wrapping ResponseWriter")
 		rw := newResponseWriter(w)
 		next(rw, r)
 		// 发送全部响应结果
 		rw.Flush()
-		log.Printf("DEBUG: responseWrapperMiddleware completed")
 	}
 }

@@ -69,78 +69,60 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 		paramByte := contextx.GetRequestBody(r)
 
-		if len(paramByte) == 0 {
-			errStr := fmt.Sprintf("%s : %s", pattern, "body为空")
-			fmt.Println(errStr)
-			//http.Error(w, errStr, http.StatusNoContent)
-			rw.WriteError(http.StatusNoContent, errStr)
-			return
-		}
+		if rp.Auth == route.Enable {
+			if len(paramByte) == 0 {
+				errStr := fmt.Sprintf("%s : %s", pattern, "body为空")
+				fmt.Println(errStr)
+				rw.WriteError(http.StatusNoContent, errStr)
+				return
+			}
 
-		var tId int64
-		var tSession int64
-		var ak []byte
+			userAuth := &model.Auth{}
+			err := json.Unmarshal(paramByte, userAuth)
+			if err != nil {
+				errStr := fmt.Sprintf("%s : %s", pattern, err)
+				fmt.Println(errStr)
+				rw.WriteError(http.StatusInternalServerError, errStr)
+				return
+			}
 
-		userAuth := &model.Auth{}
-		// 提取 token、deviceId、version
-		err := json.Unmarshal(paramByte, userAuth)
-		if err != nil {
-			errStr := fmt.Sprintf("%s : %s", pattern, err)
-			fmt.Println(errStr)
-			//http.Error(w, errStr, http.StatusInternalServerError)
-			rw.WriteError(http.StatusInternalServerError, errStr)
-			return
-		}
+			if userAuth.Version < rp.Version {
+				errStr := fmt.Sprintf(
+					"client version is %d, server version is %d. version is too low.",
+					userAuth.Version, rp.Version,
+				)
+				fmt.Println(errStr)
+				rw.WriteError(http.StatusGone, errStr)
+				return
+			}
 
-		if userAuth.Version < rp.Version {
-			//客户端版本太低
-			errStr := fmt.Sprintf(
-				"client version is %d, server version is %d. version is too low.",
-				userAuth.Version, rp.Version,
-			)
-			fmt.Println(errStr)
-			//http.Error(w, errStr, http.StatusGone)
-			rw.WriteError(http.StatusGone, errStr)
-			return
-		}
-
-		//认证
-		if rp.Auth == route.Enable { //启用认证
 			if userAuth.Token == "" {
 				errStr := fmt.Sprintf("%s : %s", pattern, "缺少令牌")
 				fmt.Println(errStr)
-				///http.Error(w, errStr, http.StatusNotAcceptable)
 				rw.WriteError(http.StatusNotAcceptable, errStr)
 				return
 			}
 
-			//提起令牌内容
 			tk := token.Token{}
 			err = tk.Decode(userAuth.Token)
 			if err != nil {
 				errStr := fmt.Sprintf("%s : %s", pattern, "令牌错误")
 				fmt.Println(errStr)
-				//http.Error(w, errStr, http.StatusNotAcceptable)
 				rw.WriteError(http.StatusNotAcceptable, errStr)
 				return
 			}
 
-			tId = tk.Id
-			tSession = tk.Session()
-			ak = []byte(tk.AccessKeyID())
-
-			//校验签名
+			ak := []byte(tk.AccessKeyID())
 			if !cipher.CheckSign(sig, paramByte, ak) {
 				errStr := fmt.Sprintf("%s : %s", pattern, "指纹检验失败")
 				fmt.Println(errStr)
-				//http.Error(w, errStr, http.StatusNotAcceptable)
 				rw.WriteError(http.StatusNotAcceptable, errStr)
 				return
 			}
 			r = contextx.SetAuth(r, &contextx.Auth{
 				Ak:      ak,
-				Uid:     tId,
-				Session: tSession,
+				Uid:     tk.Id,
+				Session: tk.Session(),
 				Token:   userAuth.Token,
 			})
 		}

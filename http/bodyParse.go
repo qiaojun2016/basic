@@ -15,9 +15,12 @@ import (
 // BodyParsingMiddleware 解析请求体并存入 Context
 func BodyParsingMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("DEBUG: BodyParsingMiddleware executed -   BodyParsingMiddleware")
 		rw := w.(*responseWriter) // 类型断言获取包装器
 		rp := contextx.GetRoutePattern(r)
+		config := contextx.GetConfig(r)
+		if config != nil && config.Debug {
+			log.Printf("DEBUG: BodyParsingMiddleware executed")
+		}
 		//请求数据
 		var paramByte []byte
 		var err error
@@ -48,13 +51,6 @@ func BodyParsingMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			}
 		}
 
-		if len(paramByte) == 0 {
-			errStr := fmt.Sprintf("%s : %s", rp.Pattern, "body为空")
-			log.Println(errStr)
-			//http.Error(w, errStr, http.StatusNoContent)
-			rw.WriteError(http.StatusNoContent, errStr)
-			return
-		}
 		// 2. 恢复 r.Body，以便后续使用
 		r.Body = io.NopCloser(bytes.NewBuffer(paramByte))
 

@@ -10,16 +10,21 @@ import (
 
 func BodySigningMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("DEBUG:BodySigningMiddleware executed -  BodySigningMiddleware")
 		rw := w.(*responseWriter) // 类型断言获取包装器
 		rp := contextx.GetRoutePattern(r)
 		a := contextx.GetAuth(r)
+		config := contextx.GetConfig(r)
+		if config != nil && config.Debug {
+			log.Printf("DEBUG: BodySigningMiddleware executed")
+		}
 		next(rw, r)
 		if rp.Auth == route.Enable {
 			responseSig := cipher.Sign(rw.body.Bytes(), a.Ak)
 			//写入header
 			rw.Header().Set(contentSign, responseSig)
 		}
-		log.Printf("DEBUG:  BodySigningMiddleware completed")
+		if config != nil && config.Debug {
+			log.Printf("DEBUG: BodySigningMiddleware completed")
+		}
 	}
 }
