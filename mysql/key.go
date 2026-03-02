@@ -19,7 +19,11 @@ func Key(key ...int64) string {
 
 // DBKey 获取一个int key或者用 string转
 func DBKey(key ...string) int64 {
+
 	if len(key) == 1 {
+		if key[0] == "" {
+			return 0
+		}
 		//转化key
 		if len(key[0]) < 10 {
 			log.Println(fmt.Sprintf("id格式错误: %s", key[0]))
