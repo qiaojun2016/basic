@@ -103,11 +103,20 @@ func (rw *responseWriter) Flush() {
 }
 
 // 响应包装器中间件
-func responseWrapperMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		rw := newResponseWriter(w)
-		next(rw, r)
-		// 发送全部响应结果
-		rw.Flush()
+func createResponseWrapperMiddleware(pattern string, logTiming bool) Middleware {
+	return func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			rw := newResponseWriter(w)
+			next(rw, r)
+			// 发送全部响应结果
+			rw.Flush()
+			if logTiming {
+				log.Printf("[HTTP] %s %d %dms",
+					pattern,
+					rw.statusCode,
+					time.Since(rw.startTime).Milliseconds(),
+				)
+			}
+		}
 	}
 }
