@@ -3,6 +3,8 @@ package mysql
 import (
 	"context"
 	"github.com/jmoiron/sqlx"
+	"log"
+	"time"
 )
 
 // WithTransaction 核心逻辑
@@ -25,6 +27,11 @@ func WithTransaction(ctx context.Context, fn func(tx *sqlx.Tx) error, dbs ...*sq
 		return err
 	}
 
+	var start time.Time
+	if dbTiming {
+		start = time.Now()
+	}
+
 	defer func() {
 		if p := recover(); p != nil {
 			tx.Rollback()
@@ -33,6 +40,12 @@ func WithTransaction(ctx context.Context, fn func(tx *sqlx.Tx) error, dbs ...*sq
 			tx.Rollback()
 		} else {
 			err = tx.Commit()
+		}
+		if dbTiming {
+			elapsed := time.Since(start).Milliseconds()
+			if elapsed >= dbThreshold {
+				log.Printf("[MySQL] transaction %dms", elapsed)
+			}
 		}
 	}()
 

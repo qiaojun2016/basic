@@ -13,16 +13,20 @@ import (
 
 type (
 	Server struct {
-		DataSource string
-		MaxOpen    int
+		DataSource         string
+		MaxOpen            int
+		LogTiming          bool  // 是否记录查询耗时
+		LogTimingThreshold int64 // 超过多少 ms 才打印，0 表示全部打印
 	}
 	server struct {
 	}
 )
 
 var (
-	Mysql   *server
-	mysqlDB *sqlx.DB
+	Mysql      *server
+	mysqlDB    *sqlx.DB
+	dbTiming   bool
+	dbThreshold int64
 )
 
 func TxAuto(f func(*sql.Rows, *sql.Tx) (err error)) (err error) {
@@ -116,6 +120,8 @@ func (s Server) Run() {
 		log.Fatal(color.Red, sqlErr, color.Reset)
 	}
 	Mysql = new(server)
+	dbTiming = s.LogTiming
+	dbThreshold = s.LogTimingThreshold
 	color.Success(fmt.Sprintf("[mysql] connect %s success", strings.Split(s.DataSource, "@tcp")[1]))
 }
 
@@ -152,6 +158,9 @@ func argsData(args []interface{}) (sqlArgs string, values []interface{}) {
 }
 
 func GetDbExec() DBExec {
+	if dbTiming {
+		return &timingDBExec{inner: mysqlDB, threshold: dbThreshold}
+	}
 	return mysqlDB
 }
 func GetDb() *sqlx.DB {
