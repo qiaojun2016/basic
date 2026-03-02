@@ -25,6 +25,11 @@
   - [中间件执行顺序](#中间件执行顺序)
 - [verify — 参数解析与校验](#verify--参数解析与校验)
 - [MySQL](#mysql)
+  - [初始化](#初始化-1)
+  - [DBExec 接口](#dbexec-接口)
+  - [WithTransaction 事务](#withtransaction-事务)
+  - [查询耗时日志](#查询耗时日志)
+  - [存储过程（旧方式）](#存储过程旧方式)
 - [Redis](#redis)
 - [ID 生成](#id-生成)
 - [Token](#token)
@@ -532,22 +537,157 @@ func handler(uid string, body []byte) (interface{}, error) {
 
 ```go
 mysql.Server{
-    DataSource: "user:password@tcp(127.0.0.1:3306)/dbname",
-    MaxOpen:    20, // 最大连接数
+    DataSource:         "user:password@tcp(127.0.0.1:3306)/dbname",
+    MaxOpen:            20,    // 最大连接数
+    LogTiming:          true,  // 开启查询耗时日志
+    LogTimingThreshold: 200,   // 只打印耗时 >= 200ms 的查询/事务，0 表示全部打印
 }.Run()
 ```
 
 连接字符串自动附加 `charset=utf8mb4&loc=Asia/Shanghai&parseTime=true&multiStatements=true`。
 
-### 事务与存储过程
+---
 
-库以**存储过程**为主要查询方式，所有操作均在事务内执行。
+### DBExec 接口
 
-**方式一：TxAuto（推荐）**
+`DBExec` 是对数据库执行能力的统一抽象，由 `*sqlx.DB` 和 `*sqlx.Tx` 共同实现。DAO 层函数接受 `mysql.DBExec` 作为参数，可在事务和非事务场景下复用同一套代码。
+
+```go
+type DBExec interface {
+    Exec(query string, args ...interface{}) (sql.Result, error)
+    NamedExec(query string, arg interface{}) (sql.Result, error)
+    Get(dest interface{}, query string, args ...interface{}) error
+    Select(dest interface{}, query string, args ...interface{}) error
+    Rebind(query string) string
+}
+```
+
+**获取非事务执行器：**
+
+```go
+exec := mysql.GetDbExec() // 返回 DBExec，开启 LogTiming 时自动包装计时器
+db   := mysql.GetDb()     // 返回原始 *sqlx.DB
+```
+
+**DAO 层写法（推荐）：**
+
+```go
+// dao/user.go
+
+func GetUser(exec mysql.DBExec, id int64) (*User, error) {
+    var u User
+    err := exec.Get(&u, "SELECT * FROM user WHERE id = ?", id)
+    return &u, err
+}
+
+func AddUser(exec mysql.DBExec, name string) error {
+    _, err := exec.Exec("INSERT INTO user (name) VALUES (?)", name)
+    return err
+}
+
+// NamedExec：使用结构体字段名作为参数
+type AddUserReq struct {
+    Name  string `db:"name"`
+    Score int    `db:"score"`
+}
+func AddUserNamed(exec mysql.DBExec, req *AddUserReq) error {
+    _, err := exec.NamedExec("INSERT INTO user (name, score) VALUES (:name, :score)", req)
+    return err
+}
+```
+
+---
+
+### WithTransaction 事务
+
+`WithTransaction` 开启一个事务，在 `fn` 内执行所有操作。`fn` 返回 `nil` 时自动提交，返回 `error` 或发生 `panic` 时自动回滚。
+
+```go
+func WithTransaction(ctx context.Context, fn func(tx *sqlx.Tx) error, dbs ...*sqlx.DB) error
+```
+
+**基本用法：**
+
+```go
+err := mysql.WithTransaction(ctx, func(tx *sqlx.Tx) error {
+    // tx 实现了 DBExec 接口，可直接传给 DAO 函数
+    if err := dao.AddUser(tx, "张三"); err != nil {
+        return err // 触发回滚
+    }
+    if err := dao.DeductScore(tx, userId, 100); err != nil {
+        return err // 触发回滚
+    }
+    return nil // 提交
+})
+```
+
+**多表操作保证原子性：**
+
+```go
+err := mysql.WithTransaction(ctx, func(tx *sqlx.Tx) error {
+    // 插入订单
+    orderId, err := dao.InsertOrder(tx, order)
+    if err != nil {
+        return err
+    }
+    // 扣减库存
+    if err := dao.DeductStock(tx, order.ProductId, order.Qty); err != nil {
+        return err
+    }
+    // 记录流水
+    return dao.InsertLog(tx, orderId, "create")
+})
+if err != nil {
+    return nil, err
+}
+```
+
+**测试场景注入 mockDb：**
+
+`WithTransaction` 的第三个参数可传入自定义 `*sqlx.DB`，用于单元测试时注入测试数据库：
+
+```go
+// 测试代码
+err := mysql.WithTransaction(ctx, func(tx *sqlx.Tx) error {
+    return dao.AddUser(tx, "测试用户")
+}, testDB) // 传入测试 DB
+```
+
+**注意事项：**
+
+- `fn` 内不要自行调用 `tx.Commit()` 或 `tx.Rollback()`，由 `WithTransaction` 统一管理
+- `fn` 内发生 `panic` 时会先回滚再重新抛出，不会吞掉 panic
+- 事务内的操作通过 `tx`（`DBExec`）执行，与非事务代码共用同一套 DAO 函数
+
+---
+
+### 查询耗时日志
+
+开启 `LogTiming: true` 后：
+
+- **非事务查询**（通过 `GetDbExec()` 获取的执行器）：每条 SQL 单独计时，格式为：
+  ```
+  [MySQL] SELECT * FROM user WHERE id = ? 5ms
+  [MySQL] INSERT INTO score (user_id, value) VALUES (?, ?) 230ms
+  ```
+
+- **事务**（`WithTransaction`）：记录从开启到提交/回滚的整体耗时，格式为：
+  ```
+  [MySQL] transaction 312ms
+  ```
+
+只有超过 `LogTimingThreshold`（ms）的查询才会打印。设为 `0` 则打印全部。
+
+---
+
+### 存储过程（旧方式）
+
+以下为兼容旧代码保留的存储过程接口，新代码推荐使用 `WithTransaction` + `DBExec`。
+
+**TxAuto：**
 
 ```go
 err = mysql.TxAuto(func(rows *sql.Rows, tx *sql.Tx) error {
-    // 执行（增删改）
     _, err := mysql.Mysql.TxExecProc(tx, "proc_add_user", userId, name)
     if err != nil {
         return err // 自动回滚
@@ -556,7 +696,7 @@ err = mysql.TxAuto(func(rows *sql.Rows, tx *sql.Tx) error {
 })
 ```
 
-**方式二：手动事务**
+**手动事务：**
 
 ```go
 tx, err := mysql.Mysql.TxBegin()
@@ -576,9 +716,7 @@ for rows.Next() {
 }
 ```
 
-**传入结构体参数：**
-
-`TxExecProc` / `TxQueryProc` 支持直接传入结构体，会按字段顺序展开为存储过程参数：
+`TxExecProc` / `TxQueryProc` 支持直接传入结构体，按字段顺序展开为存储过程参数：
 
 ```go
 type AddReq struct {
@@ -587,13 +725,6 @@ type AddReq struct {
 }
 mysql.Mysql.TxExecProc(tx, "proc_add", AddReq{Name: "张三", Score: 100})
 // 等同于 CALL proc_add(?, ?)  → ("张三", 100)
-```
-
-**获取原始连接：**
-
-```go
-db := mysql.GetDb()          // *sqlx.DB
-exec := mysql.GetDbExec()    // DBExec 接口
 ```
 
 ---
