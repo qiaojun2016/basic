@@ -52,18 +52,18 @@ const (
 
 type (
 	Server struct {
-		Addr            string      //监听地址
-		MaxPayloadBytes int         //最大消息长度
-		MaxHeaderBytes  int         //最大head息长度
-		Rate            rate.Limit  //每秒产生令牌的个数
-		Burst           int         //令牌桶大小个数
-		ReadTimeout     int         //读超时秒
-		WriteTimeout    int         //写超时秒
-		Web             bool        //是否是用于web，跨域
-		UserAgent       string      //允许的UserAgent
-		CorsCfg         *CORSConfig // cros配置，web 为 true  有效
-		Middlewares     []Middleware
-		Debug           bool
+		Addr               string      //监听地址
+		MaxPayloadBytes    int         //最大消息长度
+		MaxHeaderBytes     int         //最大head息长度
+		Rate               rate.Limit  //每秒产生令牌的个数
+		Burst              int         //令牌桶大小个数
+		ReadTimeout        int         //读超时秒
+		WriteTimeout       int         //写超时秒
+		Web                bool        //是否是用于web，跨域
+		UserAgent          string      //允许的UserAgent
+		CorsCfg            *CORSConfig // cros配置，web 为 true  有效
+		Middlewares        []Middleware
+		Debug              bool
 		LogTiming          bool  //是否记录请求耗时
 		LogTimingThreshold int64 //耗时超过多少ms才打印，0表示全部打印
 	}
@@ -203,7 +203,7 @@ func (h *Server) Run() {
 						errStr := fmt.Sprintf("%s判定为高频请求ip", realIp)
 						fmt.Println(errStr)
 						rw.WriteError(http.StatusTooManyRequests, errStr)
-							return
+						return
 					}
 					//限流
 
@@ -211,7 +211,7 @@ func (h *Server) Run() {
 						//抛弃多余流量
 						errStr := fmt.Sprintf("%s请求过快", realIp)
 						log.Println(errStr)
-							rw.WriteHeader(http.StatusTooManyRequests)
+						rw.WriteHeader(http.StatusTooManyRequests)
 						return
 					}
 				}
@@ -232,7 +232,7 @@ func (h *Server) Run() {
 						if agent {
 							errStr := fmt.Sprintf("%s : %s", pattern, "User-Agent 错误")
 							fmt.Println(errStr)
-		
+
 							rw.WriteError(http.StatusForbidden, errStr)
 
 							return
@@ -251,7 +251,7 @@ func (h *Server) Run() {
 					session = id.SId.ToString(a.Session)
 				}
 				paramByte := contextx.GetRequestBody(r)
-				log.Println("http handler", string(paramByte))
+				log.Println("http handler", uid, string(paramByte))
 				var err error
 
 				//执行
@@ -282,7 +282,7 @@ func (h *Server) Run() {
 					if err != nil {
 						errStr := fmt.Sprintf("%s : %s", pattern, err)
 						fmt.Println(errStr)
-							rw.WriteError(http.StatusInternalServerError, errStr)
+						rw.WriteError(http.StatusInternalServerError, errStr)
 						return
 					}
 
@@ -297,7 +297,7 @@ func (h *Server) Run() {
 					default:
 						errStr := fmt.Sprintf("%v is not []byte or []uint8", value)
 						fmt.Println(errStr)
-							rw.WriteError(http.StatusInternalServerError, errStr)
+						rw.WriteError(http.StatusInternalServerError, errStr)
 						return
 					}
 					if route.ContentType != "" {
@@ -345,7 +345,6 @@ func (h *Server) Run() {
 					rw.WriteError(http.StatusInternalServerError, errStr)
 					return
 				}
-
 
 				rw.WriteHeader(http.StatusOK)
 				//写出结果
