@@ -65,7 +65,9 @@ func (s server) PutSignPolicyFileIdURL(fId string) (url UploadUrl, err error) {
 		log.Println(err)
 		return
 	}
-	url.Url = "https://" + s.bucketName + "." + ossClient.Config.Endpoint
+	endpoint := strings.TrimPrefix(ossClient.Config.Endpoint, "https://")
+	endpoint = strings.TrimPrefix(endpoint, "http://")
+	url.Url = "https://" + s.bucketName + "." + endpoint
 	url.OSSAccessKeyId = ossClient.Config.AccessKeyID
 	url.Policy = policyStr
 	url.Signature = base64.StdEncoding.EncodeToString(h.Sum(nil))
