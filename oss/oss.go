@@ -44,7 +44,7 @@ var (
 
 func (s server) PutSignPolicyFileIdURL(fId string) (url UploadUrl, err error) {
 	policy := map[string]interface{}{
-		"expiration": time.Now().Add(60 * time.Second).Format("2006-01-02T15:04:05.999Z"),
+		"expiration": time.Now().UTC().Add(60 * time.Second).Format("2006-01-02T15:04:05.000Z"),
 		"conditions": []interface{}{
 			map[string]string{
 				"bucket": s.bucketName,
